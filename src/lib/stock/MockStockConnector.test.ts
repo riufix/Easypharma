@@ -27,7 +27,7 @@ describe("MockStockConnector", () => {
   it("renvoie 'unknown' pour un médicament hors catalogue", async () => {
     const res = await connector.checkAvailability("MedicamentInexistant", "750013443");
     expect(res.status).toBe("unknown");
-    expect(res.raw).toMatchObject({ produit: null, stock: null });
+    expect(res.raw).toBeNull();
   });
 
   it("renvoie 'unknown' pour une pharmacie inconnue", async () => {
@@ -56,11 +56,14 @@ describe("MockStockConnector", () => {
     expect(metro.status).toBe("unavailable");
   });
 
-  it("expose une charge brute imitant la forme du contrat Smart Rx", async () => {
+  it("expose une charge brute imitant la forme réelle du ProductDto Smart Rx", async () => {
     const res = await connector.checkAvailability("Doliprane", "750013443");
     expect(res.raw).toMatchObject({
-      produit: { cip13: expect.any(String), libelle: expect.any(String) },
-      stock: { quantite: expect.any(Number), disponible: true },
+      description: expect.any(String),
+      officialProductCode: expect.any(String),
+      isManagedStock: true,
+      productStatus: "ACTIVE",
+      stockQuantity: expect.any(Number),
       _source: "mock",
     });
   });

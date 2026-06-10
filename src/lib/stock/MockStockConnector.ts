@@ -11,18 +11,22 @@ import type {
  * (cf. POC_Brief §5 : « Ne jamais présenter des données simulées comme réelles »).
  *
  * Objectif : prouver le flux de bout en bout et figer la FORME du contrat
- * attendu du connecteur réel. Le champ `raw` imite la forme — hypothétique —
- * de la réponse de la « Data API » Smart Rx documentée dans le README.
+ * attendu du connecteur réel. Le champ `raw` imite la forme RÉELLE du `ProductDto`
+ * de la « Data API » Smart Rx (champs `description`, `officialProductCode`,
+ * `stockQuantity`, `isManagedStock`, `productStatus` — cf. SmartRxStockConnector).
  *
  * Comportement déterministe : un même (médicament, pharmacie) renvoie toujours
  * le même statut, pour une démo reproductible.
  */
 
-/** Forme — HYPOTHÉTIQUE — d'une réponse de stock de la Data API Smart Rx. */
-type SmartRxStockResponseShape = {
-  produit: { cip13: string; libelle: string } | null;
-  stock: { quantite: number; seuilAlerte: number; disponible: boolean } | null;
-  /** Marqueur explicite : ces données sont simulées. */
+/** Sous-ensemble du ProductDto réel imité par le mock (+ marqueur de simulation). */
+type MockProductDto = {
+  description: string; // libellé du produit (champ réel `description`)
+  officialProductCode: string; // CIP/EAN (champ réel `officialProductCode`)
+  isManagedStock: boolean;
+  productStatus: "ACTIVE" | "DELETED";
+  stockQuantity: number;
+  /** Marqueur explicite : ces données sont simulées (n'existe pas côté API réelle). */
   _source: "mock";
 };
 
@@ -96,12 +100,7 @@ export class MockStockConnector implements StockConnector {
 
     // Produit absent du référentiel → on ne sait pas conclure.
     if (!product) {
-      const raw: SmartRxStockResponseShape = {
-        produit: null,
-        stock: null,
-        _source: "mock",
-      };
-      return { status: "unknown", raw };
+      return { status: "unknown", raw: null };
     }
 
     const pharmacyStock = STOCK_BY_PHARMACY[pharmacyId];
@@ -109,19 +108,16 @@ export class MockStockConnector implements StockConnector {
 
     // Produit référencé mais pharmacie inconnue / produit non géré par l'officine.
     if (quantite === undefined) {
-      const raw: SmartRxStockResponseShape = {
-        produit: { cip13: product.cip13, libelle: product.libelle },
-        stock: null,
-        _source: "mock",
-      };
-      return { status: "unknown", raw };
+      return { status: "unknown", raw: null };
     }
 
-    const disponible = quantite > 0;
-    const status: AvailabilityStatus = disponible ? "available" : "unavailable";
-    const raw: SmartRxStockResponseShape = {
-      produit: { cip13: product.cip13, libelle: product.libelle },
-      stock: { quantite, seuilAlerte: 5, disponible },
+    const status: AvailabilityStatus = quantite > 0 ? "available" : "unavailable";
+    const raw: MockProductDto = {
+      description: product.libelle,
+      officialProductCode: product.cip13,
+      isManagedStock: true,
+      productStatus: "ACTIVE",
+      stockQuantity: quantite,
       _source: "mock",
     };
     return { status, raw };
