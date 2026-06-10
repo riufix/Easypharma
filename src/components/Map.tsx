@@ -83,6 +83,10 @@ export default function Map({ center = [48.8566, 2.3522], zoom = 13 }: MapProps)
           method: "POST",
           body,
         });
+        if (!res.ok) {
+          console.warn("Overpass API error:", res.status, res.statusText);
+          return;
+        }
         const data = await res.json();
         setPharmacies(data.elements ?? []);
       } finally {
