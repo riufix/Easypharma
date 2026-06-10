@@ -1,24 +1,37 @@
 "use client";
 
-import { useEffect } from "react";
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
-import L from "leaflet";
+import { MapContainer, TileLayer, CircleMarker, Popup } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
+import type { AvailabilityStatus } from "@/lib/stock";
 
-// Fix default marker icons broken by webpack
-delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-});
+export type MapPharmacy = {
+  id: string;
+  name: string;
+  address: string;
+  lat: number;
+  lng: number;
+  status: AvailabilityStatus;
+};
 
 interface MapProps {
-  center?: [number, number];
+  center: [number, number];
   zoom?: number;
+  pharmacies: MapPharmacy[];
 }
 
-export default function Map({ center = [48.8566, 2.3522], zoom = 13 }: MapProps) {
+const STATUS_COLOR: Record<AvailabilityStatus, string> = {
+  available: "#16a34a", // vert
+  unavailable: "#dc2626", // rouge
+  unknown: "#9ca3af", // gris
+};
+
+const STATUS_LABEL: Record<AvailabilityStatus, string> = {
+  available: "Disponible",
+  unavailable: "Non disponible",
+  unknown: "Inconnu",
+};
+
+export default function Map({ center, zoom = 12, pharmacies }: MapProps) {
   return (
     <MapContainer
       center={center}
@@ -29,9 +42,32 @@ export default function Map({ center = [48.8566, 2.3522], zoom = 13 }: MapProps)
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
-      <Marker position={center}>
-        <Popup>Position par défaut</Popup>
-      </Marker>
+      {pharmacies.map((p) => {
+        const color = STATUS_COLOR[p.status];
+        return (
+          <CircleMarker
+            key={p.id}
+            center={[p.lat, p.lng]}
+            radius={11}
+            pathOptions={{
+              color: "#ffffff",
+              weight: 2,
+              fillColor: color,
+              fillOpacity: 1,
+            }}
+          >
+            <Popup>
+              <strong>{p.name}</strong>
+              <br />
+              {p.address}
+              <br />
+              <span style={{ color, fontWeight: 600 }}>
+                {STATUS_LABEL[p.status]}
+              </span>
+            </Popup>
+          </CircleMarker>
+        );
+      })}
     </MapContainer>
   );
 }
