@@ -1,88 +1,54 @@
-import type {
-  Availability,
-  AvailabilityStatus,
-  StockConnector,
+import {
+  computeCoverage,
+  type AvailabilityStatus,
+  type PharmacyResult,
+  type ProductAvailability,
+  type StockConnector,
 } from "./StockConnector";
 
 /**
- * Connecteur de stock SIMULÉ.
+ * Connecteur de stock SIMULÉ (MVP).
  *
- * ⚠️ Données entièrement fictives — ne représentent PAS un stock réel
- * (cf. POC_Brief §5 : « Ne jamais présenter des données simulées comme réelles »).
+ * ⚠️ Données entièrement fictives — ne représentent PAS un stock réel. L'UI
+ * affiche en permanence un bandeau « données de démonstration ».
  *
- * Objectif : prouver le flux de bout en bout et figer la FORME du contrat
- * attendu du connecteur réel. Le champ `raw` imite la forme RÉELLE du `ProductDto`
- * de la « Data API » Smart Rx (champs `description`, `officialProductCode`,
- * `stockQuantity`, `isManagedStock`, `productStatus` — cf. SmartRxStockConnector).
+ * Disponibilité **pseudo-aléatoire mais STABLE** par (pharmacie, médicament) :
+ * une même paire renvoie toujours le même statut (démo reproductible, et le
+ * compteur de couverture reste cohérent d'une recherche à l'autre). Couvre les
+ * 3 statuts ; certains tirages tombent volontairement en « non disponible » /
+ * « inconnu » pour rendre le compteur X/Y parlant.
  *
- * Comportement déterministe : un même (médicament, pharmacie) renvoie toujours
- * le même statut, pour une démo reproductible.
+ * La forme du retour (`PharmacyResult`) est identique à celle attendue du
+ * connecteur réel → bascule mock → réel sans refactor.
  */
-
-/** Sous-ensemble du ProductDto réel imité par le mock (+ marqueur de simulation). */
-type MockProductDto = {
-  description: string; // libellé du produit (champ réel `description`)
-  officialProductCode: string; // CIP/EAN (champ réel `officialProductCode`)
-  isManagedStock: boolean;
-  productStatus: "ACTIVE" | "DELETED";
-  stockQuantity: number;
-  /** Marqueur explicite : ces données sont simulées (n'existe pas côté API réelle). */
-  _source: "mock";
-};
-
-/** Une entrée de catalogue produit (référentiel commun à toutes les officines). */
-type Product = { cip13: string; libelle: string };
-
-const CATALOG: Product[] = [
-  { cip13: "3400930000001", libelle: "Doliprane 1000 mg" },
-  { cip13: "3400930000002", libelle: "Amoxicilline 500 mg" },
-  { cip13: "3400930000003", libelle: "Ventoline 100 µg" },
-  { cip13: "3400930000004", libelle: "Spasfon 80 mg" },
-  { cip13: "3400930000005", libelle: "Levothyrox 75 µg" },
-];
-
-/**
- * Stock simulé par pharmacie (clé = identifiant pharmacie = n° FINESS).
- * `quantite > 0` → disponible ; `0` → en rupture ; absent → produit non référencé.
- * Conçu pour qu'une recherche unique fasse apparaître les 3 statuts à la fois.
- */
-const STOCK_BY_PHARMACY: Record<string, Record<string, number>> = {
-  // PHARMACIE DE BABYLONE (75007)
-  "750013443": {
-    "3400930000001": 42, // Doliprane     → available
-    "3400930000002": 0, //  Amoxicilline  → unavailable (rupture)
-    "3400930000003": 7, //  Ventoline     → available
-    "3400930000004": 15, // Spasfon       → available
-  },
-  // PHARMACIE DU METRO (75010)
-  "750018475": {
-    "3400930000001": 0, //  Doliprane     → unavailable (rupture)
-    "3400930000002": 23, // Amoxicilline  → available
-    "3400930000005": 4, //  Levothyrox    → available
-  },
-  // PHARMACIE EDGAR QUINET (75014)
-  "750024085": {
-    "3400930000001": 12, // Doliprane     → available
-    "3400930000003": 0, //  Ventoline     → unavailable (rupture)
-    "3400930000004": 30, // Spasfon       → available
-  },
-};
 
 const SIMULATED_LATENCY_MS = 250;
 
 function normalize(s: string): string {
   return s
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "") // supprime les accents
+    .replace(/[̀-ͯ]/g, "")
     .toLowerCase()
     .trim();
 }
 
-/** Recherche « floue » d'un produit par nom (sous-chaîne, insensible casse/accents). */
-function findProduct(medicationName: string): Product | undefined {
-  const q = normalize(medicationName);
-  if (!q) return undefined;
-  return CATALOG.find((p) => normalize(p.libelle).includes(q));
+/** Hash FNV-1a 32 bits → réel dans [0, 1). Déterministe. */
+function hashUnit(input: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < input.length; i++) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  // >>> 0 pour rester non signé, puis normalisation sur 2^32.
+  return (h >>> 0) / 0x100000000;
+}
+
+/** Statut stable pour un couple (médicament, pharmacie). */
+function stableStatus(medication: string, pharmacyId: string): AvailabilityStatus {
+  const h = hashUnit(`${normalize(medication)}@${pharmacyId}`);
+  if (h < 0.15) return "unknown"; //      ~15 %
+  if (h < 0.45) return "unavailable"; //  ~30 %
+  return "available"; //                  ~55 %
 }
 
 function delay(ms: number): Promise<void> {
@@ -91,35 +57,25 @@ function delay(ms: number): Promise<void> {
 
 export class MockStockConnector implements StockConnector {
   async checkAvailability(
-    medicationName: string,
-    pharmacyId: string,
-  ): Promise<Availability> {
-    await delay(SIMULATED_LATENCY_MS); // imite la latence réseau d'un appel LGO
+    medications: string[],
+    pharmacyIds: string[],
+  ): Promise<PharmacyResult[]> {
+    await delay(SIMULATED_LATENCY_MS); // imite la latence d'un appel LGO groupé
 
-    const product = findProduct(medicationName);
+    // Marqueur de fraîcheur : "vérifié à l'instant" côté mock.
+    const updatedAt = new Date().toISOString();
 
-    // Produit absent du référentiel → on ne sait pas conclure.
-    if (!product) {
-      return { status: "unknown", raw: null };
-    }
-
-    const pharmacyStock = STOCK_BY_PHARMACY[pharmacyId];
-    const quantite = pharmacyStock?.[product.cip13];
-
-    // Produit référencé mais pharmacie inconnue / produit non géré par l'officine.
-    if (quantite === undefined) {
-      return { status: "unknown", raw: null };
-    }
-
-    const status: AvailabilityStatus = quantite > 0 ? "available" : "unavailable";
-    const raw: MockProductDto = {
-      description: product.libelle,
-      officialProductCode: product.cip13,
-      isManagedStock: true,
-      productStatus: "ACTIVE",
-      stockQuantity: quantite,
-      _source: "mock",
-    };
-    return { status, raw };
+    return pharmacyIds.map((pharmacyId) => {
+      const products: ProductAvailability[] = medications.map((medication) => ({
+        medication,
+        status: stableStatus(medication, pharmacyId),
+      }));
+      return {
+        pharmacyId,
+        products,
+        coverage: computeCoverage(products),
+        updatedAt,
+      };
+    });
   }
 }

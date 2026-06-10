@@ -1,17 +1,15 @@
-# EasyPharma — POC « lecture de stock pharmacie »
+# EasyPharma — MVP
 
-POC **interne et jetable** dont le but unique est de prouver une seule chose :
-**on sait lire l'état de stock d'un médicament dans le système d'une pharmacie**,
-via l'API d'un éditeur de logiciel de gestion d'officine (LGO).
+Aide un patient à trouver une **pharmacie proche qui a son/ses médicament(s) en
+stock**. MVP web (vrai produit, pas un POC jetable), construit dans la continuité
+du POC de lecture de stock.
 
-La recherche, la carte (Leaflet) et l'UI ne sont là que pour rendre la démonstration
-présentable. Voir [`POC_Brief.md`](./POC_Brief.md) pour le cadrage complet.
+> ⚠️ **La donnée de stock est SIMULÉE (mockée).** L'accès aux vraies API des
+> logiciels de pharmacie (LGO) n'est pas encore décroché. Un **bandeau permanent**
+> le rappelle dans l'UI. La **localisation des pharmacies** (FINESS) et la
+> **géolocalisation** sont, elles, **réelles**.
 
-> ⚠️ **Données de stock simulées.** Par défaut l'application utilise un connecteur
-> **mock** : les disponibilités affichées sont **fictives** et ne reflètent aucun
-> stock réel. Seules l'identité et la localisation des pharmacies sont réelles
-> (issues de FINESS). Le connecteur Smart Rx réel est **écrit d'après la vraie spec
-> mais non testé** (faute d'accès) — voir [Réalité d'accès](#réalité-daccès--poc-daccès).
+**Stack :** Next.js 16 (App Router, TypeScript) · Tailwind CSS · Leaflet (react-leaflet).
 
 ---
 
@@ -20,158 +18,175 @@ présentable. Voir [`POC_Brief.md`](./POC_Brief.md) pour le cadrage complet.
 ```bash
 npm install
 npm run dev      # http://localhost:3000
-```
-
-Autres commandes :
-
-```bash
-npm test         # tests Vitest du connecteur (3 statuts)
+npm test         # tests Vitest (couverture, distance haversine, mock)
 npm run build    # build de production (typecheck inclus)
 ```
 
-**Utilisation :** saisir un nom de médicament (ex. `Doliprane`, `Ventoline`,
-`Amoxicilline`, `Spasfon`, `Levothyrox`) → la liste et la carte affichent, pour
-chaque pharmacie, **Disponible / Non disponible / Inconnu**.
-Astuce démo : `Ventoline` fait apparaître les **3 statuts** à la fois.
+**Parcours :** ajouter un ou plusieurs médicaments (chips) → « Utiliser ma position »
+(ou saisir une adresse) → régler le **rayon** → la carte et la liste affichent les
+pharmacies proches, triées par distance, avec leur couverture.
 
 ---
 
-## Critère de réussite (rappel)
+## Les 3 fonctionnalités
 
-> À partir d'un nom de médicament saisi en texte, l'application affiche, pour
-> quelques pharmacies, l'état de disponibilité (disponible / non disponible), la
-> donnée de stock passant par un connecteur LGO.
+1. **Recherche textuelle multi-médicaments** — par nom, plusieurs médicaments sous
+   forme de « chips » (comme les lignes d'une ordonnance), avec **autocomplétion sur
+   le référentiel réel BDPM** (la saisie libre reste possible). *(Le référentiel +
+   l'autocomplétion ont été ajoutés à la demande, au-delà du périmètre initial.)*
+2. **Pharmacies proches** disposant du/des produit(s) — **liste + carte Leaflet
+   synchronisées**, **triées par distance** (haversine), filtrées par un **rayon
+   réglable** (0,5–10 km).
+3. **Compteur de couverture** — pour chaque pharmacie, **combien des médicaments sont
+   disponibles** (ex. 3/5) + le **détail dispo/non/inconnu par produit**. Pas de
+   quantité exacte, juste oui/non.
 
-✅ Atteint avec le connecteur **mock** : flux complet **recherche → connecteur de
-stock (serveur) → carte + liste**, et intégration Smart Rx réelle **codée d'après le
-contrat réel et branchable sans refactor** (voir ci-dessous).
-
----
-
-## Résultats de la recherche d'API
-
-Sources consultées le **2026-06-10**.
-
-### 1. Smart Rx — Data API (cible principale)
-
-Smart Rx, groupe Cegedim, ~9 000 pharmacies.
-
-- **Spec OpenAPI PUBLIQUE et accessible** (vérifié le 2026-06-10) :
-  - Swagger UI : <https://www.pharmanuage.fr/data-api/swagger-ui/>
-  - Spec JSON : <https://www.pharmanuage.fr/data-api/v3/api-docs> (**DATA-API v2.2.8**)
-  - (Le portail `developer.pharmanuage.fr/dataapi/doc/docs/` renvoie 403, mais la
-    spec ci-dessus suffit et donne le contrat exact.)
-- **Le connecteur est aligné sur le contrat RÉEL** (plus aucune hypothèse sur les
-  endpoints / noms de champs) — voir
-  [`src/lib/stock/SmartRxStockConnector.ts`](./src/lib/stock/SmartRxStockConnector.ts) :
-
-  | | Contrat réel (spec) |
-  |---|---|
-  | **Auth** | `POST /data-api/v2/auth`, body `{ username, password }` → `{ token }` (valable 24 h) |
-  | **Stock** | `GET /data-api/v2/{finess}/products?cip={cip}&active=true`, header `Authorization: Bearer {token}` |
-  | **Champ stock** | `stockQuantity` (+ `isManagedStock`, `productStatus`, `description`, `officialProductCode`) |
-  | **`{finess}`** | = `pharmacyId` (n° FINESS établissement) |
-
-- **Condition d'accès** : droits liés au **contrat Smart Rx**, API ouverte
-  « **officine par officine, à la demande du pharmacien** ». Les **identifiants**
-  restent à obtenir (commercial) → le connecteur est écrit mais **non testé**.
-- **2 ambiguïtés de la spec** (balisées `⚠️ À CONFIRMER` dans le code), à lever au
-  premier appel réel :
-  1. **Header d'auth** : la *description* impose `Authorization: Bearer {token}`,
-     mais le `securityScheme` OpenAPI déclare un apiKey nommé `TOKEN`. Repli prévu.
-  2. **Forme de la réponse `products`** : la spec déclare `ProductDto` au singulier
-     alors que `page`/`size` existent → le parseur tolère tableau / page Spring
-     `{ content: [...] }` / objet seul.
-- **Recherche par nom non native** : les filtres sont `cip`/`ids`, pas le libellé.
-  Le connecteur gère les 2 cas (saisie = CIP → `?cip=` ; sinon repli : pagination +
-  filtre local sur `description`). En prod, résoudre nom → CIP via un référentiel
-  (BDPM) est préférable.
-
-### 2. Winpharma — « Winpasserelle » (alternative)
-
-Webservice éditeur exposant prix et stocks. Même logique d'accès (partenariat /
-identifiants éditeur). Non investigué en détail — alternative au cas où Smart Rx
-serait indisponible. S'intègre via une autre implémentation de `StockConnector`.
-
-### 3. Apotekisto (référence du pattern d'intégration)
-
-<https://www.apotekisto.fr/> — connecteur tiers reliant déjà la plupart des LGO
-(dont Smart Rx via « Agile 360 »). Confirme le **pattern** : un intermédiaire qui
-normalise l'accès stock multi-LGO derrière une interface unique — exactement le
-rôle de notre `StockConnector`.
-
-### Données pharmacies (FINESS)
-
-Les 3 pharmacies en dur sont **réelles**, issues du dataset open data
-« carte-des-pharmacies-de-paris » (source FINESS) :
-<https://data.iledefrance.fr/explore/dataset/carte-des-pharmacies-de-paris/>.
-Champs repris : raison sociale, adresse, n° FINESS (= `pharmacyId`), `lat`/`lng`
-(WGS84). Voir [`src/data/pharmacies.ts`](./src/data/pharmacies.ts).
+Plus : fiche pharmacie (nom, adresse, distance, horaires, **bouton itinéraire**),
+**indicateur de fraîcheur** du stock, **bandeau « démonstration »**, et les états
+(aucune position, aucun résultat, géoloc refusée, chargement, erreur).
 
 ---
 
-## Architecture
+## Architecture du stock (mock, branché côté serveur)
+
+Le stock passe par une abstraction `StockConnector`, **toujours côté serveur**
+(route API), pour que la vraie API LGO se branche plus tard **sans rien refactorer**
+et que d'éventuels identifiants ne soient jamais exposés au navigateur.
 
 ```
 src/
-├─ lib/stock/
-│  ├─ StockConnector.ts          Interface + type Availability (le contrat unique)
-│  ├─ MockStockConnector.ts      Mock : 3 statuts, latence simulée, raw ≈ ProductDto réel
-│  ├─ SmartRxStockConnector.ts   Connecteur réel (Data API v2) — écrit, non testé
-│  └─ index.ts                   getStockConnector() — choix via STOCK_CONNECTOR
-├─ data/pharmacies.ts            2-3 pharmacies en dur (réelles, FINESS)
+├─ lib/
+│  ├─ stock/
+│  │  ├─ StockConnector.ts        Interface + types (ProductAvailability, PharmacyResult) + computeCoverage
+│  │  ├─ MockStockConnector.ts    Mock : dispo pseudo-aléatoire STABLE par (pharmacie, médicament), latence, 3 statuts
+│  │  ├─ SmartRxStockConnector.ts Connecteur réel Smart Rx (Data API v2) — écrit d'après la vraie spec, non testé
+│  │  └─ index.ts                 getStockConnector() — choix via STOCK_CONNECTOR (mock par défaut)
+│  ├─ pharmacies/
+│  │  ├─ types.ts                 Type Pharmacy + interface PharmacySource
+│  │  ├─ OverpassPharmacySource.ts Chargement dynamique OSM/Overpass (France, par rayon, cache)
+│  │  ├─ LocalPharmacySource.ts   Repli : jeu FINESS Paris filtré par rayon
+│  │  └─ index.ts                 loadPharmaciesNear() — Overpass + repli auto local
+│  ├─ geo.ts                      Haversine + tri par distance
+│  ├─ coverage.ts                 Niveau de couverture → couleur des marqueurs
+│  └─ medications.ts              Recherche dans le référentiel BDPM (autocomplétion)
+├─ data/
+│  ├─ pharmacies.paris.json       Jeu FINESS Paris (repli hors-ligne)
+│  ├─ pharmacies.ts               Chargement du jeu de repli
+│  └─ medications.json            Noms de médicaments réels (BDPM, ~15 600)
 ├─ app/
-│  ├─ api/availability/route.ts  Route serveur : nom de médicament → statut par pharmacie
-│  └─ page.tsx                   Recherche + carte Leaflet + liste (Tailwind)
-└─ components/
-   ├─ Map.tsx                    Carte Leaflet, marqueurs colorés par statut
-   └─ MapWrapper.tsx             dynamic import ssr:false (gotcha Leaflet + Next)
+│  ├─ api/search/route.ts         Route serveur : médicaments + position + rayon → pharmacies triées + couverture
+│  ├─ api/medications/route.ts    Route serveur : autocomplétion de noms (référentiel BDPM)
+│  └─ page.tsx                    Page unique (orchestration)
+└─ components/                    SearchBar, PositionControl, RadiusControl, Map, MapWrapper, PharmacyCard, DemoBanner
 ```
 
-**Le connecteur de stock vit côté serveur** (route API). D'éventuels identifiants
-LGO ne sont **jamais exposés au client**.
-
-Contrat unique :
+Contrat :
 
 ```ts
-type Availability = { status: 'available' | 'unavailable' | 'unknown'; raw?: unknown };
+type ProductAvailability = { medication: string; status: 'available' | 'unavailable' | 'unknown' };
+type PharmacyResult = {
+  pharmacyId: string;
+  products: ProductAvailability[];
+  coverage: { found: number; total: number };  // ex. 3 / 5
+  updatedAt: string;                            // fraîcheur
+};
 interface StockConnector {
-  checkAvailability(medicationName: string, pharmacyId: string): Promise<Availability>;
+  checkAvailability(medications: string[], pharmacyIds: string[]): Promise<PharmacyResult[]>;
 }
 ```
 
----
+### Comment marche le mock
 
-## Réalité d'accès — « POC d'accès »
+`MockStockConnector` génère une disponibilité **pseudo-aléatoire mais stable** :
+un hash déterministe de `(médicament, pharmacie)` donne toujours le même statut
+(~55 % disponible, ~30 % non, ~15 % inconnu). Le compteur de couverture reste donc
+cohérent d'une recherche à l'autre, et les 3 statuts sont représentés.
 
-Les API LGO de production exigent **identifiants + autorisation d'une officine** que
-ce POC n'a pas. Ce volet se règle par des **contacts commerciaux**, hors périmètre
-technique ici.
-
-Le code est construit contre un **mock réaliste derrière l'interface
-`StockConnector`** : le connecteur Smart Rx réel se branche **sans aucun refactor**
-de la route API ni de l'UI.
-
-### Passer du mock au connecteur réel
+### Comment brancher un vrai connecteur LGO
 
 1. Obtenir les accès Smart Rx (`SMARTRX_USERNAME`, `SMARTRX_PASSWORD`, au besoin
-   `SMARTRX_BASE_URL`) — voir [`.env.example`](./.env.example).
+   `SMARTRX_BASE_URL`) — voir [`.env.example`](./.env.example). L'API est ouverte
+   « officine par officine, à la demande du pharmacien ».
 2. Lancer avec `STOCK_CONNECTOR=smartrx`. Le connecteur (auth + appel `products` +
-   mapping vers `Availability`) est **déjà écrit d'après la spec réelle**.
-3. Au premier appel réel, lever les 2 ambiguïtés balisées `⚠️ À CONFIRMER` dans
-   [`SmartRxStockConnector.ts`](./src/lib/stock/SmartRxStockConnector.ts) (header
-   d'auth ; forme exacte de la réponse `products`).
+   mapping) est **déjà écrit d'après la spec OpenAPI réelle** de la Data API
+   (`https://www.pharmanuage.fr/data-api/v3/api-docs`, DATA-API v2.2.8) :
+   - Auth : `POST /data-api/v2/auth` `{ username, password }` → `{ token }` (24 h) ;
+   - Stock : `GET /data-api/v2/{finess}/products?cip=…` → champ `stockQuantity` ;
+   - `{finess}` = `pharmacyId`.
+3. Lever les 2 ambiguïtés de la spec balisées `⚠️ À CONFIRMER` dans
+   [`SmartRxStockConnector.ts`](./src/lib/stock/SmartRxStockConnector.ts) (forme du
+   header d'auth ; forme exacte de la réponse `products`).
 
-Tant que les accès manquent, `STOCK_CONNECTOR=smartrx` lève une erreur explicite par
-pharmacie (la route la dégrade en statut `unknown` + message) — comportement vérifié.
+Tant que les identifiants manquent, `STOCK_CONNECTOR=smartrx` lève une erreur
+explicite ; la route la dégrade en statuts « inconnu » + message (l'UI tient).
+**Aucun endpoint LGO n'est inventé.**
 
 ---
 
-## Hors périmètre (assumé)
+## Sources de données
 
-Pas de géoloc réelle / tri proximité, pas de comptes / ordonnances / scan, pas de
-DSFR ni d'accessibilité RGAA, pas de base de données ni de déploiement. Stack du POC
-(Next.js + Tailwind + Leaflet) volontairement différente de la stack cible du produit
-(React Native / MapLibre / Supabase) : le POC est **jetable**.
+### Pharmacies — chargement dynamique par zone
 
-Voir [`COMPTE_RENDU.md`](./COMPTE_RENDU.md) pour ce qui est prouvé et ce qui reste à valider.
+Les pharmacies sont chargées **dynamiquement autour de la position, dans le rayon
+choisi** (pas de jeu figé). Abstraction `PharmacySource` (`src/lib/pharmacies/`),
+sélection via `PHARMACY_SOURCE` :
+
+- **`overpass` (défaut)** — **OpenStreetMap** via l'API **Overpass**, gratuite et
+  sans clé, **couvre toute la France** et est requêtable par rayon. La plupart des
+  officines portent `ref:FR:FINESS` (utilisé comme `id` → compatible avec le
+  connecteur Smart Rx réel) et `opening_hours` (**horaires réels** quand présents).
+  Adresses OSM parfois incomplètes → repli « Adresse non renseignée (OSM) »
+  (l'itinéraire reste fiable, basé sur les coordonnées). Résultats mis en cache en
+  mémoire (par zone + rayon) ; liste plafonnée à 150 pharmacies (les plus proches,
+  signalé dans l'UI).
+- **`local`** (repli automatique si Overpass échoue/ne renvoie rien) — jeu
+  **FINESS Paris** embarqué (`src/data/pharmacies.paris.json`, dataset open data
+  « carte-des-pharmacies-de-paris », source FINESS :
+  <https://data.iledefrance.fr/explore/dataset/carte-des-pharmacies-de-paris/>).
+  `name`/`address`/`id`/`lat`/`lng` **réels** ; ⚠️ `hours` **ILLUSTRATIVES** (FINESS
+  ne contient pas les horaires). Couverture limitée à Paris.
+
+### Autres sources
+
+- **Noms de médicaments** — **BDPM** (Base de Données Publique des Médicaments),
+  fichier `CIS_bdpm.txt`, service public :
+  <https://base-donnees-publique.medicaments.gouv.fr/>. ~15 600 dénominations
+  réelles, embarquées dans `src/data/medications.json` et servies par
+  `/api/medications` (autocomplétion). Réutilisable telles quelles pour brancher le
+  vrai stock (recherche par nom/CIP).
+- **Géocodage d'adresse** — API Adresse (**BAN**), gratuite et publique :
+  <https://api-adresse.data.gouv.fr/search/> (appelée pour le repli « saisir une
+  adresse »).
+- **Géolocalisation** — `navigator.geolocation` du navigateur.
+- **Fonds de carte** — tuiles OpenStreetMap.
+
+---
+
+## Périmètre
+
+**DANS le MVP :** recherche multi-médicaments par nom · géoloc + repli adresse (BAN)
+· tri par distance + rayon réglable · carte Leaflet + liste synchronisées · fiche
+pharmacie + itinéraire · compteur de couverture X/Y + détail par produit · indicateur
+de fraîcheur + bandeau démo · états (vide / aucun résultat / géoloc refusée /
+chargement / erreur).
+
+**HORS MVP (V1/V2) :** compte / connexion · scan & import d'ordonnance · commande en
+ligne, click & collect, équivalences · back-office
+pharmacien · **vraie** connexion LGO (mockée ici) · hébergement HDS · conformité DSFR
+complète. Accessibilité de base seulement (HTML sémantique, labels, contraste,
+navigation clavier).
+
+---
+
+## Tests
+
+`npm test` (Vitest) couvre la logique métier :
+
+- **couverture X/Y** (`computeCoverage`) ;
+- **tri par distance** (haversine + `sortByDistance`) ;
+- **`MockStockConnector`** : un résultat par pharmacie, stabilité, 3 statuts,
+  couverture, cas 0 médicament ;
+- **mapping Overpass** (`mapOverpassElements`) : FINESS prioritaire, `center` des
+  ways, dédoublonnage, valeurs par défaut ;
+- **autocomplétion BDPM** (`searchMedications`) : priorité au préfixe, insensible
+  aux accents/casse, limite respectée.

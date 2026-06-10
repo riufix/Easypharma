@@ -1,4 +1,10 @@
-import type { Availability, AvailabilityStatus, StockConnector } from "./StockConnector";
+import {
+  computeCoverage,
+  type AvailabilityStatus,
+  type PharmacyResult,
+  type ProductAvailability,
+  type StockConnector,
+} from "./StockConnector";
 
 /**
  * Connecteur de stock RÉEL vers la « Data API » Smart Rx (groupe Cegedim).
@@ -7,46 +13,35 @@ import type { Availability, AvailabilityStatus, StockConnector } from "./StockCo
  *    UI   : https://www.pharmanuage.fr/data-api/swagger-ui/
  *    Spec : https://www.pharmanuage.fr/data-api/v3/api-docs   (DATA-API v2.2.8)
  *
- * Le code ci-dessous N'EST PAS hypothétique : endpoints, paramètres et noms de
- * champs proviennent de la spec. Il reste NON TESTÉ faute d'accès (il faut des
- * identifiants + l'autorisation d'une officine). Deux points sont AMBIGUS dans la
- * spec et balisés `⚠️ À CONFIRMER` ci-dessous ; tout le reste est conforme.
+ * Endpoints, paramètres et noms de champs proviennent de la spec (PAS d'invention).
+ * Reste NON TESTÉ faute d'accès (identifiants + autorisation d'une officine). Tant
+ * que les identifiants manquent, `checkAvailability` lève une erreur explicite.
  *
  * Bascule mock → réel : `STOCK_CONNECTOR=smartrx`. La forme du retour
- * (`Availability`) est identique au MockStockConnector → aucun refactor de la
- * route API ni de l'UI (cf. POC_Brief §5).
+ * (`PharmacyResult[]`) est identique au MockStockConnector → aucun refactor de la
+ * route API ni de l'UI.
  *
  * ──────────────────────────────────────────────────────────────────────────
- * Contrat réel utilisé :
- *
- *   Auth :  POST {base}/data-api/v2/auth
- *           body JSON  { "username": "...", "password": "..." }
- *           → 200/201  { "token": "..." }   (TokenDto ; valable 24 h)
- *
- *   Stock : GET {base}/data-api/v2/{finess}/products?cip={cip13}&active=true
- *           header  Authorization: Bearer {token}
- *           → 200    ProductDto (ou collection de ProductDto, cf. pagination)
- *           champs utiles : stockQuantity, isManagedStock, productStatus,
- *                           description (libellé), officialProductCode (CIP/EAN).
- *
- *   {finess} = identifiant pharmacie (= pharmacyId, n° FINESS établissement).
- *   Accès ouvert « officine par officine, à la demande du pharmacien ».
+ * Contrat réel :
+ *   Auth :  POST {base}/data-api/v2/auth  body { username, password } → { token } (24 h)
+ *   Stock : GET {base}/data-api/v2/{finess}/products?cip={cip}&active=true
+ *           header Authorization: Bearer {token}
+ *           → ProductDto : { stockQuantity, isManagedStock, productStatus,
+ *                            description, officialProductCode, ... }
+ *   {finess} = pharmacyId. Accès « officine par officine, à la demande du pharmacien ».
  * ──────────────────────────────────────────────────────────────────────────
  */
 
-/** Sous-ensemble du ProductDto réel (champs effectivement exploités). */
 type ProductDto = {
-  productId?: number;
-  description?: string; // libellé du produit
-  officialProductCode?: string; // CIP7 / CIP13 / EAN13 (issu de la BCB)
-  ean13?: string;
-  isManagedStock?: boolean; // produit géré en stock ou non
-  productStatus?: string; // ACTIVE | DELETED
-  stockQuantity?: number; // quantité en stock
+  description?: string;
+  officialProductCode?: string;
+  isManagedStock?: boolean;
+  productStatus?: string;
+  stockQuantity?: number;
 };
 
-/** La spec déclare ProductDto au singulier mais expose page/size : on tolère */
-/** une réponse en tableau, en page Spring { content: [...] }, ou en objet seul. */
+/** Spec déclare ProductDto au singulier mais expose page/size → on tolère */
+/** tableau / page Spring { content:[…] } / objet seul. */
 function toProductArray(body: unknown): ProductDto[] {
   if (Array.isArray(body)) return body as ProductDto[];
   if (body && typeof body === "object") {
@@ -57,26 +52,24 @@ function toProductArray(body: unknown): ProductDto[] {
   return [];
 }
 
-const TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // token valable 24 h (cf. spec)
+const TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
 
 export class SmartRxStockConnector implements StockConnector {
   private readonly baseUrl: string;
   private readonly username: string;
   private readonly password: string;
-
   private cachedToken: { token: string; expiresAt: number } | null = null;
 
   constructor() {
-    // Le serveur déclaré dans la spec est https://www.pharmanuage.fr(:443).
     this.baseUrl = (process.env.SMARTRX_BASE_URL ?? "https://www.pharmanuage.fr").replace(/\/$/, "");
     this.username = process.env.SMARTRX_USERNAME ?? "";
     this.password = process.env.SMARTRX_PASSWORD ?? "";
   }
 
   async checkAvailability(
-    medicationName: string,
-    pharmacyId: string,
-  ): Promise<Availability> {
+    medications: string[],
+    pharmacyIds: string[],
+  ): Promise<PharmacyResult[]> {
     if (!this.username || !this.password) {
       throw new Error(
         "SmartRxStockConnector : identifiants manquants. " +
@@ -87,78 +80,76 @@ export class SmartRxStockConnector implements StockConnector {
     }
 
     const token = await this.getToken();
-    const product = await this.findProduct(medicationName, pharmacyId, token);
+    const updatedAt = new Date().toISOString();
 
-    if (!product) {
-      // Produit introuvable dans le catalogue de cette officine.
-      return { status: "unknown", raw: null };
-    }
-
-    return { status: this.mapStatus(product), raw: product };
+    return Promise.all(
+      pharmacyIds.map(async (pharmacyId) => {
+        const products: ProductAvailability[] = await Promise.all(
+          medications.map(async (medication) => ({
+            medication,
+            status: await this.statusFor(medication, pharmacyId, token),
+          })),
+        );
+        return {
+          pharmacyId,
+          products,
+          coverage: computeCoverage(products),
+          updatedAt,
+        };
+      }),
+    );
   }
 
-  /** Conversion ProductDto → statut du contrat commun. */
-  private mapStatus(p: ProductDto): AvailabilityStatus {
-    if (p.isManagedStock === false) return "unknown"; // stock non suivi → indéterminé
-    if (typeof p.stockQuantity !== "number") return "unknown";
-    return p.stockQuantity > 0 ? "available" : "unavailable";
+  private async statusFor(
+    medication: string,
+    finess: string,
+    token: string,
+  ): Promise<AvailabilityStatus> {
+    const product = await this.findProduct(medication, finess, token);
+    if (!product) return "unknown";
+    if (product.isManagedStock === false) return "unknown";
+    if (typeof product.stockQuantity !== "number") return "unknown";
+    return product.stockQuantity > 0 ? "available" : "unavailable";
   }
 
-  /** Authentification (POST /auth) avec cache 24 h du token. */
+  /** Token d'auth avec cache 24 h. */
   private async getToken(): Promise<string> {
     const now = Date.now();
     if (this.cachedToken && this.cachedToken.expiresAt > now) {
       return this.cachedToken.token;
     }
-
     const res = await fetch(`${this.baseUrl}/data-api/v2/auth`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify({ username: this.username, password: this.password }),
     });
-    if (!res.ok) {
-      throw new Error(`Smart Rx auth: HTTP ${res.status} ${res.statusText}`);
-    }
+    if (!res.ok) throw new Error(`Smart Rx auth: HTTP ${res.status} ${res.statusText}`);
     const json = (await res.json()) as { token?: string };
-    if (!json?.token) {
-      throw new Error("Smart Rx auth: réponse sans champ 'token'.");
-    }
+    if (!json?.token) throw new Error("Smart Rx auth: réponse sans champ 'token'.");
     this.cachedToken = { token: json.token, expiresAt: now + TOKEN_TTL_MS };
     return json.token;
   }
 
   /**
-   * Récupère le produit correspondant au médicament recherché.
+   * Recherche le produit correspondant au médicament.
    *
-   * ⚠️ La Data API ne propose PAS de recherche par libellé : les filtres sont
-   * `cip` (code CIP) ou `ids`. Deux cas :
-   *   1) la saisie est un code CIP/EAN (chiffres) → requête directe `?cip=`.
-   *   2) sinon → on parcourt le catalogue de l'officine et on filtre sur
-   *      `description` côté connecteur (fallback autonome, sans référentiel tiers).
-   *
-   * En production, préférer le cas (1) en résolvant nom → CIP via un référentiel
-   * (BDPM / base CIP) afin d'éviter de paginer le catalogue à chaque requête.
+   * ⚠️ La Data API ne filtre PAS par libellé (seulement `cip`/`ids`) :
+   *   - saisie = code CIP/EAN → requête directe `?cip=` ;
+   *   - sinon → pagination du catalogue + filtre local sur `description` (repli
+   *     autonome ; en prod, préférer une résolution nom → CIP via la BDPM).
    */
   private async findProduct(
-    medicationName: string,
+    medication: string,
     finess: string,
     token: string,
   ): Promise<ProductDto | null> {
-    const query = medicationName.trim();
-    const looksLikeCip = /^\d{7,13}$/.test(query);
-
-    if (looksLikeCip) {
-      const products = await this.getProducts(finess, token, {
-        cip: query,
-        active: "true",
-        size: "1",
-      });
+    const q = medication.trim();
+    if (/^\d{7,13}$/.test(q)) {
+      const products = await this.getProducts(finess, token, { cip: q, active: "true", size: "1" });
       return products[0] ?? null;
     }
-
-    // Fallback : recherche par libellé en paginant le catalogue de l'officine.
-    const target = normalize(query);
-    const MAX_PAGES = 50; // garde-fou (50 × 100 = 5000 références)
+    const target = normalize(q);
+    const MAX_PAGES = 50;
     for (let page = 0; page < MAX_PAGES; page++) {
       const products = await this.getProducts(finess, token, {
         active: "true",
@@ -168,12 +159,11 @@ export class SmartRxStockConnector implements StockConnector {
       if (products.length === 0) break;
       const match = products.find((p) => normalize(p.description ?? "").includes(target));
       if (match) return match;
-      if (products.length < 100) break; // dernière page
+      if (products.length < 100) break;
     }
     return null;
   }
 
-  /** GET /data-api/v2/{finess}/products avec le token. */
   private async getProducts(
     finess: string,
     token: string,
@@ -184,18 +174,15 @@ export class SmartRxStockConnector implements StockConnector {
       `${this.baseUrl}/data-api/v2/${encodeURIComponent(finess)}/products?${qs}`,
       {
         headers: {
-          // ⚠️ À CONFIRMER : la *description* de la spec impose ce header
-          // (Authorization: Bearer {token}). Mais le `securityScheme` OpenAPI
-          // déclare un apiKey nommé `TOKEN`. Si le Bearer est rejeté (401),
-          // basculer sur :  TOKEN: token
+          // ⚠️ À CONFIRMER : la *description* de la spec impose
+          // `Authorization: Bearer {token}`, mais le securityScheme OpenAPI
+          // déclare un apiKey nommé `TOKEN`. Si 401, basculer sur : TOKEN: token
           Authorization: `Bearer ${token}`,
           Accept: "application/json",
         },
       },
     );
-    if (!res.ok) {
-      throw new Error(`Smart Rx products: HTTP ${res.status} ${res.statusText}`);
-    }
+    if (!res.ok) throw new Error(`Smart Rx products: HTTP ${res.status} ${res.statusText}`);
     return toProductArray(await res.json());
   }
 }

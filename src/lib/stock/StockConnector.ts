@@ -1,39 +1,56 @@
 /**
- * Contrat unique de lecture de stock d'une pharmacie.
+ * Contrat de lecture de stock multi-médicaments / multi-pharmacies (MVP).
  *
- * C'est LE point dur du projet (cf. POC_Brief §1) : savoir lire l'état de stock
- * réel d'un médicament dans le système d'une pharmacie via l'API d'un éditeur de
- * LGO (Smart Rx, Winpharma…).
+ * C'est le point dur du projet : lire l'état de stock réel des médicaments dans le
+ * système d'une pharmacie via l'API d'un éditeur de LGO (Smart Rx, Winpharma…).
  *
- * Toute implémentation concrète (mock ou réelle) vit côté serveur et respecte
- * cette interface, de sorte que le connecteur Smart Rx réel se branche ensuite
- * SANS refactor (cf. POC_Brief §5).
+ * Toute implémentation (mock ou réelle) vit CÔTÉ SERVEUR et respecte cette
+ * interface, afin que le connecteur réel se branche ensuite SANS refactor de la
+ * route API ni de l'UI. Le connecteur n'est jamais appelé depuis le client (pas
+ * d'identifiants LGO dans le navigateur).
  */
 
-/** État de disponibilité d'un médicament dans une pharmacie donnée. */
+/** Statut de disponibilité d'un médicament donné dans une pharmacie donnée. */
 export type AvailabilityStatus = "available" | "unavailable" | "unknown";
 
-export type Availability = {
+/** Disponibilité d'un médicament (par nom) — oui/non, PAS de quantité exacte. */
+export type ProductAvailability = {
+  medication: string;
   status: AvailabilityStatus;
-  /**
-   * Réponse brute du connecteur sous-jacent, telle que renvoyée par l'API LGO.
-   * Conservée pour le débogage / la traçabilité ; sa forme dépend du connecteur.
-   * Côté Mock, elle imite la forme du contrat Smart Rx documenté dans le README.
-   */
-  raw?: unknown;
+};
+
+/** Résultat de stock pour une pharmacie : détail par produit + couverture. */
+export type PharmacyResult = {
+  pharmacyId: string;
+  products: ProductAvailability[];
+  /** Compteur de couverture, ex. { found: 3, total: 5 }. */
+  coverage: { found: number; total: number };
+  /** Fraîcheur de la donnée (ISO 8601). */
+  updatedAt: string;
 };
 
 export interface StockConnector {
   /**
-   * Renvoie l'état de disponibilité d'un médicament (recherché par nom) dans la
-   * pharmacie identifiée par `pharmacyId`.
+   * Renvoie, pour chaque pharmacie demandée, la disponibilité de chaque
+   * médicament recherché + le compteur de couverture.
    *
-   * Ne doit jamais lever d'exception pour un médicament introuvable : dans ce cas
-   * le statut est `"unknown"`. Les erreurs réseau / d'authentification peuvent en
-   * revanche remonter (l'appelant — la route API — les transforme en `"unknown"`).
+   * Doit renvoyer un `PharmacyResult` par `pharmacyId` fourni (même ordre non
+   * garanti — la route ré-associe par id). Ne lève pas pour un médicament
+   * introuvable (statut `"unknown"`).
    */
   checkAvailability(
-    medicationName: string,
-    pharmacyId: string,
-  ): Promise<Availability>;
+    medications: string[],
+    pharmacyIds: string[],
+  ): Promise<PharmacyResult[]>;
+}
+
+/** Calcule la couverture (nb de médicaments disponibles / total). */
+export function computeCoverage(products: ProductAvailability[]): {
+  found: number;
+  total: number;
+} {
+  return {
+    found: products.filter((p) => p.status === "available").length,
+    total: products.length,
+  };
 }

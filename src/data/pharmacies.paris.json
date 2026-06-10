@@ -1,0 +1,282 @@
+[
+  {
+    "id": "750010266",
+    "name": "Pharmacie de l'Ile Saint Louis",
+    "address": "8 rue Jean du Bellay, 75004 Paris",
+    "lat": 48.8530396,
+    "lng": 2.3537559,
+    "hours": "Lun–Ven 8h30–20h, Sam 9h–19h"
+  },
+  {
+    "id": "750010597",
+    "name": "Pharmacie du Village",
+    "address": "26 rue du Temple, 75004 Paris",
+    "lat": 48.8573751,
+    "lng": 2.3524425,
+    "hours": "Lun–Sam 9h–19h30"
+  },
+  {
+    "id": "750012155",
+    "name": "Pharmacie de la Sorbonne",
+    "address": "49 rue des Ecoles, 75005 Paris",
+    "lat": 48.8499214,
+    "lng": 2.3434061,
+    "hours": "Lun–Ven 8h–20h, Sam 8h–13h"
+  },
+  {
+    "id": "750010480",
+    "name": "Pharmacie de la Tour",
+    "address": "18 rue Saint Martin, 75004 Paris",
+    "lat": 48.8583244,
+    "lng": 2.3499582,
+    "hours": "Lun–Sam 8h30–20h"
+  },
+  {
+    "id": "750010035",
+    "name": "Pharmacie des Archives",
+    "address": "2 rue des Archives, 75004 Paris",
+    "lat": 48.8571393,
+    "lng": 2.3541161,
+    "hours": "Lun–Ven 9h–19h, Sam 9h–13h"
+  },
+  {
+    "id": "750010175",
+    "name": "Pharmacie Centrale Ile St Louis",
+    "address": "14 rue des Deux Ponts, 75004 Paris",
+    "lat": 48.8519511,
+    "lng": 2.3567388,
+    "hours": "Lun–Dim 8h–22h"
+  },
+  {
+    "id": "750010050",
+    "name": "Pharmacie de la Mairie",
+    "address": "9 rue des Archives, 75004 Paris",
+    "lat": 48.857705,
+    "lng": 2.3543303,
+    "hours": "Lun–Ven 8h30–20h, Sam 9h–19h"
+  },
+  {
+    "id": "750010282",
+    "name": "Pharmacie Phie du Marais Saint Paul",
+    "address": "26 rue du Pont Louis Philippe, 75004 Paris",
+    "lat": 48.8559303,
+    "lng": 2.3565155,
+    "hours": "Lun–Sam 9h–19h30"
+  },
+  {
+    "id": "750010142",
+    "name": "Pharmacie de l'Hotel de Ville",
+    "address": "4 rue du Bourg Tibourg, 75004 Paris",
+    "lat": 48.8567788,
+    "lng": 2.3558116,
+    "hours": "Lun–Ven 8h–20h, Sam 8h–13h"
+  },
+  {
+    "id": "750010654",
+    "name": "Pharmacie Rivoli",
+    "address": "2 rue Tiron, 75004 Paris",
+    "lat": 48.8557182,
+    "lng": 2.3579565,
+    "hours": "Lun–Sam 8h30–20h"
+  },
+  {
+    "id": "750013062",
+    "name": "Pharmacie Saint Andre des Arts",
+    "address": "44 rue Saint Andre des Arts, 75006 Paris",
+    "lat": 48.8535776,
+    "lng": 2.3389152,
+    "hours": "Lun–Ven 9h–19h, Sam 9h–13h"
+  },
+  {
+    "id": "750012940",
+    "name": "Pharmacie de l'Ecole de Medecine",
+    "address": "1 rue de l'Odeon, 75006 Paris",
+    "lat": 48.85169945,
+    "lng": 2.33868827,
+    "hours": "Lun–Dim 8h–22h"
+  },
+  {
+    "id": "750012833",
+    "name": "Pharmacie Pharm du Senat",
+    "address": "42 rue Monsieur le Prince, 75006 Paris",
+    "lat": 48.8487844,
+    "lng": 2.340423,
+    "hours": "Lun–Ven 8h30–20h, Sam 9h–19h"
+  },
+  {
+    "id": "750010563",
+    "name": "Pharmacie Premiere",
+    "address": "24 boulevard Sebastopol, 75004 Paris",
+    "lat": 48.86059463,
+    "lng": 2.3493897899999996,
+    "hours": "Lun–Sam 9h–19h30"
+  },
+  {
+    "id": "750011330",
+    "name": "Pharmacie des Arènes",
+    "address": "30 rue Monge, 75005 Paris",
+    "lat": 48.8462937,
+    "lng": 2.3516048,
+    "hours": "Lun–Ven 8h–20h, Sam 8h–13h"
+  },
+  {
+    "id": "750013260",
+    "name": "Pharmacie de Seine",
+    "address": "61 rue de Seine, 75006 Paris",
+    "lat": 48.8544826,
+    "lng": 2.3369494,
+    "hours": "Lun–Sam 8h30–20h"
+  },
+  {
+    "id": "750012247",
+    "name": "Pharmacie Soufflot",
+    "address": "17 rue Soufflot, 75005 Paris",
+    "lat": 48.8470255,
+    "lng": 2.3416572,
+    "hours": "Lun–Ven 9h–19h, Sam 9h–13h"
+  },
+  {
+    "id": "750013211",
+    "name": "Pharmacie Pharm Plaire",
+    "address": "28 rue de Seine, 75006 Paris",
+    "lat": 48.8555616,
+    "lng": 2.3366897,
+    "hours": "Lun–Dim 8h–22h"
+  },
+  {
+    "id": "750012742",
+    "name": "Pharmacie Pharm Zagorski",
+    "address": "6 rue Jacob, 75006 Paris",
+    "lat": 48.8547705,
+    "lng": 2.3362217,
+    "hours": "Lun–Ven 8h30–20h, Sam 9h–19h"
+  },
+  {
+    "id": "750010936",
+    "name": "Pharmacie des Facultes",
+    "address": "11 rue Gay Lussac, 75005 Paris",
+    "lat": 48.8460462,
+    "lng": 2.3413186,
+    "hours": "Lun–Sam 9h–19h30"
+  },
+  {
+    "id": "750012106",
+    "name": "Pharmacie Internationale Saint Michel",
+    "address": "71 boulevard Saint Michel, 75005 Paris",
+    "lat": 48.8463255,
+    "lng": 2.3405042,
+    "hours": "Lun–Ven 8h–20h, Sam 8h–13h"
+  },
+  {
+    "id": "750011132",
+    "name": "Pharmacie de la Contrescarpe",
+    "address": "49 rue Lacepede, 75005 Paris",
+    "lat": 48.8442458,
+    "lng": 2.3500111,
+    "hours": "Lun–Sam 8h30–20h"
+  },
+  {
+    "id": "750012643",
+    "name": "Pharmacie Pharm Faldini",
+    "address": "8 rue du Four, 75006 Paris",
+    "lat": 48.8529433,
+    "lng": 2.3348491,
+    "hours": "Lun–Ven 9h–19h, Sam 9h–13h"
+  },
+  {
+    "id": "750009276",
+    "name": "Pharmacie Internationale Centrale",
+    "address": "143 rue Saint Denis, 75002 Paris",
+    "lat": 48.8626681,
+    "lng": 2.3495752,
+    "hours": "Lun–Dim 8h–22h"
+  },
+  {
+    "id": "750009326",
+    "name": "Pharmacie du Sentier Rakover",
+    "address": "247 rue Saint Denis, 75002 Paris",
+    "lat": 48.8626681,
+    "lng": 2.3495752,
+    "hours": "Lun–Ven 8h30–20h, Sam 9h–19h"
+  },
+  {
+    "id": "750011413",
+    "name": "Pharmacie de l'Olivier",
+    "address": "65 rue Monge, 75005 Paris",
+    "lat": 48.8440466,
+    "lng": 2.3524759,
+    "hours": "Lun–Sam 9h–19h30"
+  },
+  {
+    "id": "750011272",
+    "name": "Pharmacie Pharm Jourdan",
+    "address": "12 rue Linné, 75005 Paris",
+    "lat": 48.8446062,
+    "lng": 2.3549149,
+    "hours": "Lun–Ven 8h–20h, Sam 8h–13h"
+  },
+  {
+    "id": "750012692",
+    "name": "Pharmacie City Pharma",
+    "address": "26 rue du Four, 75006 Paris",
+    "lat": 48.8527156,
+    "lng": 2.3333908,
+    "hours": "Lun–Sam 8h30–20h"
+  },
+  {
+    "id": "750009391",
+    "name": "Pharmacie Rossi Nahon",
+    "address": "22 rue de Turbigo, 75002 Paris",
+    "lat": 48.8637502,
+    "lng": 2.3487856,
+    "hours": "Lun–Ven 9h–19h, Sam 9h–13h"
+  },
+  {
+    "id": "750008831",
+    "name": "Pharmacie du Palais Royal",
+    "address": "164 rue Saint Honore, 75001 Paris",
+    "lat": 48.862191,
+    "lng": 2.3396426,
+    "hours": "Lun–Dim 8h–22h"
+  },
+  {
+    "id": "750012783",
+    "name": "Pharmacie Florence Boubert",
+    "address": "48 rue Jacob, 75006 Paris",
+    "lat": 48.8559452,
+    "lng": 2.3328547,
+    "hours": "Lun–Ven 8h30–20h, Sam 9h–19h"
+  },
+  {
+    "id": "750008641",
+    "name": "Pharmacie Saint Eustache",
+    "address": "23 rue Montorgueil, 75001 Paris",
+    "lat": 48.864107,
+    "lng": 2.3464971,
+    "hours": "Lun–Sam 9h–19h30"
+  },
+  {
+    "id": "750009946",
+    "name": "Pharmacie Saint Gilles",
+    "address": "50 rue de Turenne, 75003 Paris",
+    "lat": 48.8582831,
+    "lng": 2.3645956,
+    "hours": "Lun–Ven 8h–20h, Sam 8h–13h"
+  },
+  {
+    "id": "750011934",
+    "name": "Pharmacie Saint Jacques",
+    "address": "243 rue Saint Jacques, 75005 Paris",
+    "lat": 48.8428621,
+    "lng": 2.3414429,
+    "hours": "Lun–Sam 8h30–20h"
+  },
+  {
+    "id": "750012726",
+    "name": "Pharmacie de l'Epoque",
+    "address": "49 rue du Four, 75006 Paris",
+    "lat": 48.8521875,
+    "lng": 2.3307715,
+    "hours": "Lun–Ven 9h–19h, Sam 9h–13h"
+  }
+]

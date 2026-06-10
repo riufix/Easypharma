@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "EasyPharma — POC",
-  description: "POC : lecture de stock d'un médicament en pharmacie",
+  title: "EasyPharma",
+  description: "Trouvez une pharmacie proche qui a vos médicaments en stock",
 };
 
 export default function RootLayout({

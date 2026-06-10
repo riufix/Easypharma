@@ -1,70 +1,69 @@
 import { describe, it, expect } from "vitest";
 import { MockStockConnector } from "./MockStockConnector";
+import { computeCoverage } from "./StockConnector";
+import { PHARMACIES } from "@/data/pharmacies";
 
-/**
- * Tests du connecteur de stock simulé : couvre les 3 statuts du contrat
- * (available / unavailable / unknown) et quelques garanties de robustesse.
- *
- * Identifiants pharmacie (n° FINESS) utilisés, cf. data/pharmacies.ts :
- *   750013443 = Pharmacie de Babylone
- *   750018475 = Pharmacie du Métro
- */
+const connector = new MockStockConnector();
+
 describe("MockStockConnector", () => {
-  const connector = new MockStockConnector();
-
-  it("renvoie 'available' quand le stock est positif", async () => {
-    // Babylone a 42 Doliprane en stock.
-    const res = await connector.checkAvailability("Doliprane", "750013443");
-    expect(res.status).toBe("available");
+  it("renvoie un résultat par pharmacie, un produit par médicament", async () => {
+    const res = await connector.checkAvailability(
+      ["Doliprane", "Ventoline"],
+      ["750010266", "750010597"],
+    );
+    expect(res).toHaveLength(2);
+    for (const r of res) {
+      expect(r.products).toHaveLength(2);
+      expect(r.coverage.total).toBe(2);
+      expect(r.pharmacyId).toMatch(/^\d+$/);
+      expect(() => new Date(r.updatedAt).toISOString()).not.toThrow();
+    }
   });
 
-  it("renvoie 'unavailable' quand le produit est en rupture (stock 0)", async () => {
-    // Babylone est en rupture d'Amoxicilline (quantité 0).
-    const res = await connector.checkAvailability("Amoxicilline", "750013443");
-    expect(res.status).toBe("unavailable");
+  it("est stable : même (médicament, pharmacie) → même statut", async () => {
+    const a = await connector.checkAvailability(["Amoxicilline"], ["750010266"]);
+    const b = await connector.checkAvailability(["Amoxicilline"], ["750010266"]);
+    expect(a[0].products[0].status).toBe(b[0].products[0].status);
   });
 
-  it("renvoie 'unknown' pour un médicament hors catalogue", async () => {
-    const res = await connector.checkAvailability("MedicamentInexistant", "750013443");
-    expect(res.status).toBe("unknown");
-    expect(res.raw).toBeNull();
+  it("couvre les 3 statuts sur l'ensemble des pharmacies", async () => {
+    const meds = ["Doliprane", "Ventoline", "Amoxicilline", "Spasfon", "Levothyrox"];
+    const ids = PHARMACIES.map((p) => p.id);
+    const res = await connector.checkAvailability(meds, ids);
+    const statuses = new Set(res.flatMap((r) => r.products.map((p) => p.status)));
+    expect(statuses.has("available")).toBe(true);
+    expect(statuses.has("unavailable")).toBe(true);
+    expect(statuses.has("unknown")).toBe(true);
   });
 
-  it("renvoie 'unknown' pour une pharmacie inconnue", async () => {
-    const res = await connector.checkAvailability("Doliprane", "000000000");
-    expect(res.status).toBe("unknown");
+  it("calcule la couverture = nb de médicaments disponibles", async () => {
+    const res = await connector.checkAvailability(
+      ["Doliprane", "Ventoline", "Amoxicilline"],
+      ["750010266"],
+    );
+    const r = res[0];
+    const expected = r.products.filter((p) => p.status === "available").length;
+    expect(r.coverage.found).toBe(expected);
+    expect(r.coverage.total).toBe(3);
+    expect(r.coverage).toEqual(computeCoverage(r.products));
   });
 
-  it("est insensible à la casse et aux accents", async () => {
-    const a = await connector.checkAvailability("doliprane", "750013443");
-    const b = await connector.checkAvailability("DOLIPRANE", "750013443");
-    expect(a.status).toBe("available");
-    expect(b.status).toBe("available");
+  it("gère 0 médicament : couverture 0/0", async () => {
+    const res = await connector.checkAvailability([], ["750010266"]);
+    expect(res[0].products).toHaveLength(0);
+    expect(res[0].coverage).toEqual({ found: 0, total: 0 });
   });
+});
 
-  it("est déterministe (même entrée → même statut)", async () => {
-    const a = await connector.checkAvailability("Ventoline", "750013443");
-    const b = await connector.checkAvailability("Ventoline", "750013443");
-    expect(a.status).toBe(b.status);
-  });
-
-  it("expose un statut différent selon la pharmacie pour un même médicament", async () => {
-    // Doliprane : dispo à Babylone, en rupture au Métro.
-    const babylone = await connector.checkAvailability("Doliprane", "750013443");
-    const metro = await connector.checkAvailability("Doliprane", "750018475");
-    expect(babylone.status).toBe("available");
-    expect(metro.status).toBe("unavailable");
-  });
-
-  it("expose une charge brute imitant la forme réelle du ProductDto Smart Rx", async () => {
-    const res = await connector.checkAvailability("Doliprane", "750013443");
-    expect(res.raw).toMatchObject({
-      description: expect.any(String),
-      officialProductCode: expect.any(String),
-      isManagedStock: true,
-      productStatus: "ACTIVE",
-      stockQuantity: expect.any(Number),
-      _source: "mock",
-    });
+describe("computeCoverage", () => {
+  it("compte les statuts 'available' uniquement", () => {
+    expect(
+      computeCoverage([
+        { medication: "a", status: "available" },
+        { medication: "b", status: "unavailable" },
+        { medication: "c", status: "available" },
+        { medication: "d", status: "unknown" },
+      ]),
+    ).toEqual({ found: 2, total: 4 });
   });
 });
