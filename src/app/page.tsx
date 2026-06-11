@@ -66,7 +66,18 @@ export default function Home() {
   }, [selectedId]);
 
   const results = response?.results ?? [];
-  const mapItems: MapItem[] = results.map((r) => ({
+  const center: [number, number] = position ? [position.lat, position.lng] : DEFAULT_CENTER;
+  const searched = medications.length > 0;
+
+  // Quand une recherche est active, on masque (liste + carte) les pharmacies qui
+  // n'ont AUCUN des médicaments recherchés : seules les pharmacies utiles restent.
+  // Sans recherche, on montre toutes les pharmacies du rayon.
+  const visibleResults = searched
+    ? results.filter((r) => r.coverage.found > 0)
+    : results;
+  const hiddenCount = results.length - visibleResults.length;
+
+  const mapItems: MapItem[] = visibleResults.map((r) => ({
     id: r.id,
     name: r.name,
     address: r.address,
@@ -79,12 +90,9 @@ export default function Home() {
     products: r.products,
   }));
 
-  const center: [number, number] = position ? [position.lat, position.lng] : DEFAULT_CENTER;
-  const searched = medications.length > 0;
-
   // Tri de la liste : d'abord le plus de médicaments trouvés (couverture), puis le
   // plus proche en cas d'égalité. Sans recherche, on reste sur la distance.
-  const listResults = [...results].sort((a, b) => {
+  const listResults = [...visibleResults].sort((a, b) => {
     if (searched && b.coverage.found !== a.coverage.found) {
       return b.coverage.found - a.coverage.found;
     }
@@ -138,13 +146,24 @@ export default function Home() {
                 </p>
               )}
 
-              {!loading && results.length > 0 && (
+              {!loading && results.length > 0 && visibleResults.length === 0 && (
+                <p className="rounded bg-gray-50 p-3 text-sm text-gray-600">
+                  Aucune des {results.length} pharmacie{results.length > 1 ? "s" : ""} de ce
+                  rayon n&apos;a les médicaments recherchés. Augmentez le rayon ou modifiez la
+                  recherche.
+                </p>
+              )}
+
+              {!loading && visibleResults.length > 0 && (
                 <>
                   <p className="mb-1 text-sm text-gray-600">
-                    {response?.truncatedFrom
-                      ? `${results.length} pharmacies les plus proches (sur ${response.truncatedFrom} dans le rayon)`
-                      : `${results.length} pharmacie${results.length > 1 ? "s" : ""} dans ${radiusKm.toFixed(1)} km`}
+                    {searched
+                      ? `${visibleResults.length} pharmacie${visibleResults.length > 1 ? "s" : ""} avec au moins un médicament`
+                      : response?.truncatedFrom
+                        ? `${visibleResults.length} pharmacies les plus proches (sur ${response.truncatedFrom} dans le rayon)`
+                        : `${visibleResults.length} pharmacie${visibleResults.length > 1 ? "s" : ""} dans ${radiusKm.toFixed(1)} km`}
                     {!searched && " — ajoutez un médicament pour la disponibilité"}
+                    {searched && hiddenCount > 0 && ` · ${hiddenCount} sans aucun médicament masquée${hiddenCount > 1 ? "s" : ""}`}
                   </p>
                   {response?.source === "local" && (
                     <p className="mb-2 text-xs text-amber-600">
